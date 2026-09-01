@@ -12,7 +12,7 @@ At the present moment this repository does not have any firmware images.
 
 The ``XC56PY`` is the model number of the 2<sup>nd</sup> Generation Echo.
 
-This file includes the YAML file from [Home Assistant Voice Preview Edition](https://github.com/esphome/home-assistant-voice-pe) and modifies the GPIO and platform settings to match the Echo's and the custom control board's architecture. As a result the Echo has the same behaviour as the Home Assistant Voice, including sound and lighting effects.
+This file includes the YAML file from [Home Assistant Voice Preview Edition](https://github.com/esphome/home-assistant-voice-pe), as a package, and modifies the GPIO and platform settings to match the Echo's and the custom control board's architecture. As a result the Echo has the same behaviour as the Home Assistant Voice, including sound and lighting effects.
 
 This YAML file will not compile on its own, it needs to be included by another YAML file that has the wifi and other settings. Two example YAML files are included.
 
