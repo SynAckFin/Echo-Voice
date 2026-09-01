@@ -1,0 +1,385 @@
+substitutions:
+  # Amplifier
+  jack_sense_gpio:   GPIO7
+  # i2s audio out
+  i2s_mclk_gpio:     GPIO15
+  i2s_bclk_gpio:     GPIO16
+  i2s_data_gpio:     GPIO17
+  i2s_wclk_gpio:     GPIO18
+  # i2s audio in
+  i2s2_data_gpio:    GPIO14
+  i2s2_bclk_gpio:    GPIO21
+  i2s2_wclk_gpio:    GPIO47
+  i2s2_mclk_gpio:    GPIO48
+  # i2c
+  sda_gpio:          GPIO9
+  scl_gpio:          GPIO10
+  # Control buttons
+  btn_vol_up_gpio:   GPIO38
+  btn_vol_down_gpio: GPIO40
+  btn_mic_mute_gpio: GPIO41
+  btn_attn_gpio:     GPIO42
+  # Misc
+  mic_mute_gpio:     GPIO39
+  adc_rst_gpio:      GPIO13
+  # Other
+  en_amp_gpio:       GPIO11
+  en_audio_gpio:     GPIO12
+  en_aux_out_gpio:   GPIO6
+
+packages:
+  HomeAssistantVoicePE: github://esphome/home-assistant-voice-pe/home-assistant-voice.yaml@26.6.0
+
+external_components:
+  - source: github://SynAckFin/esphome-is31fl3236a@2026-09-01-alpha
+  - source: github://SynAckFin/esphome-tlv320adc3101@2026-09-01-alpha
+
+sensor:
+  - id: !remove dial
+
+switch:
+  - id: !remove master_mute_switch
+  - id: master_mute_switch
+    platform: gpio
+    restore_mode: RESTORE_DEFAULT_OFF
+    icon: "mdi:microphone-off"
+    name: Mute
+    entity_category: config
+    pin:
+      number: ${mic_mute_gpio}
+      mode:
+        output: true
+  - id: !extend internal_speaker_amp
+    platform: gpio
+    pin: ${en_amp_gpio}
+  # Controls the internal speaker output
+  # Always on. Speaker can be switched on
+  # or off with internal_speaker_amp
+  - id: internal_speaker_switch
+    platform: gpio
+    restore_mode: ALWAYS_ON
+    icon: "mdi:speaker"
+    entity_category: config
+    internal: false
+    pin:
+      number: ${en_audio_gpio}
+      mode:
+        output: true
+      inverted: true
+  # Auxillary output switch
+  - id: auxiliary_output_switch
+    platform: gpio
+    restore_mode: ALWAYS_OFF
+    icon: "mdi:audio-input-stereo-minijack"
+    entity_category: config
+    internal: false
+    pin:
+      number: ${en_aux_out_gpio}
+      mode:
+        output: true
+      inverted: true
+
+binary_sensor:
+  # Doesn't have an XU316, This prevents LEDs showing an XU316 failure
+  - id: voice_kit_component
+    platform: template
+  # Hardware mute switch replaced with mute button
+  - id: !remove  hardware_mute_switch
+  - id: hardware_mute_switch
+    platform: gpio
+    internal: true
+    pin:
+      number: ${btn_mic_mute_gpio}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_press:
+      - switch.toggle: master_mute_switch
+      - script.execute: control_leds
+  # Volume control
+  - id: volume_up_button
+    platform: gpio
+    internal: true
+    pin:
+      number: ${btn_vol_up_gpio}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - autorepeat:
+        - delay: 500ms
+          time_off: 100ms
+          time_on: 400ms
+        - delay: 3s
+          time_off: 100ms
+          time_on: 200ms
+    on_press:
+      - logger.log: "Volume Up"
+      - lambda: id(dial_touched) = true;
+      - if:
+          condition:
+            binary_sensor.is_off: center_button
+          then:
+            - script.execute:
+                id: control_volume
+                increase_volume: true
+          else:
+            - if:
+                condition:
+                  media_player.is_playing:
+                    id: sendspin_group_media_player
+                then:
+                  - script.execute:
+                      id: control_group_volume
+                      increase_volume: true
+                else:
+                  - script.execute:
+                      id: control_hue
+                      increase_hue: true
+  - id: volume_down_button
+    platform: gpio
+    internal: true
+    pin:
+      number: ${btn_vol_down_gpio}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - autorepeat:
+        - delay: 500ms
+          time_off: 100ms
+          time_on: 400ms
+        - delay: 3s
+          time_off: 100ms
+          time_on: 200ms
+    on_press:
+      - logger.log: "Volume Down"
+      - lambda: id(dial_touched) = true;
+      - if:
+          condition:
+            binary_sensor.is_off: center_button
+          then:
+            - script.execute:
+                id: control_volume
+                increase_volume: false
+          else:
+            - if:
+                condition:
+                  media_player.is_playing:
+                    id: sendspin_group_media_player
+                then:
+                  - script.execute:
+                      id: control_group_volume
+                      increase_volume: false
+                else:
+                  - script.execute:
+                      id: control_hue
+                      increase_hue: false
+  - id: !extend  center_button
+    pin:
+      number: ${btn_attn_gpio}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+  - id: !extend jack_plugged
+    pin:
+      number: ${jack_sense_gpio}
+
+script:
+  - id: !remove control_volume
+  - id: control_volume
+    mode: restart
+    parameters:
+      increase_volume: bool  # True: Increase volume / False: Decrease volume.
+    then:
+      - delay: 16ms
+      - if:
+          condition:
+            lambda: return increase_volume;
+          then:
+            - media_player.volume_up:
+                id: external_media_player
+          else:
+            - media_player.volume_down:
+                id: external_media_player
+      - script.execute: control_leds
+      - delay: 1s
+      - lambda: id(dial_touched) = false;
+      - script.execute: control_leds
+  # Script executed when the volume is increased/decreased from the dial for the group media player
+  - id: !remove control_group_volume
+  - id: control_group_volume
+    mode: restart
+    parameters:
+      increase_volume: bool  # True: Increase volume / False: Decrease volume.
+    then:
+      - delay: 16ms
+      - if:
+          condition:
+            lambda: return increase_volume;
+          then:
+            - lambda: id(group_volume_changed) = true;
+            - media_player.volume_up:
+                id: sendspin_group_media_player
+          else:
+            - lambda: id(group_volume_changed) = true;
+            - media_player.volume_down:
+                id: sendspin_group_media_player
+      - script.execute: control_leds
+      - delay: 1s
+      - lambda: id(dial_touched) = false;
+      - lambda: id(group_volume_changed) = false;
+      - script.execute: control_leds
+      - logger.log: "control_group_volume"
+  # Script executed when the hue is increased/decreased from the dial
+  - id: !remove control_hue
+  - id: control_hue
+    mode: restart
+    parameters:
+      increase_hue: bool  # True: Increase hue / False: Decrease hue.
+    then:
+      - delay: 16ms
+      - if:
+          condition:
+            lambda: return( id(volume_up_button).state || id(volume_down_button).state || id(color_changed));
+          then:
+            - lambda: |
+                id(color_changed) = true;
+                auto light_color = id(voice_assistant_leds).current_values;
+                int hue = 0;
+                float saturation = 0;
+                float value = 0;
+                rgb_to_hsv( light_color.get_red(),
+                            light_color.get_green(),
+                            light_color.get_blue(),
+                            hue,
+                            saturation,
+                            value);
+                if (increase_hue) {
+                  hue = (hue + 10) % 360;
+                } else {
+                  hue = (hue + 350) % 360;
+                }
+                if (saturation < 0.05) {
+                  saturation = 1;
+                }
+                float red = 0;
+                float green = 0;
+                float blue = 0;
+                hsv_to_rgb( hue,
+                            saturation,
+                            value,
+                            red,
+                            green,
+                            blue);
+                id(voice_assistant_leds).make_call().set_rgb(red, green, blue).perform();
+      - wait_until:
+          binary_sensor.is_off: center_button
+      - lambda: |
+          id(dial_touched) = false;
+          // now we "save" the new LED color/state to led_ring, maintaining its brightness and state
+          auto led_ring_call = id(led_ring).make_call();
+          auto va_leds_cv = id(voice_assistant_leds).current_values;
+          led_ring_call.from_light_color_values(va_leds_cv);
+          led_ring_call.set_brightness(id(led_ring).current_values.get_brightness());
+          led_ring_call.set_state(id(led_ring).current_values.is_on());
+          led_ring_call.perform();
+      - script.execute: control_leds
+      - delay: 500ms
+      - lambda: id(color_changed) = false;
+      - logger.log: "control_hue"
+
+# No XU316 chip so remove
+voice_kit: !remove
+
+light:
+  - id: !extend leds_internal
+    platform: is31fl3236a
+    pin: !remove
+    chipset: !remove
+    max_refresh_rate: !remove
+    power_supply: !remove
+    rgb_order: RGB
+    rmt_symbols: !remove
+    use_psram: false
+
+power_supply: !remove
+
+i2c:
+  - id: !extend internal_i2c
+    sda: ${sda_gpio}
+    scl: ${scl_gpio}
+
+i2s_audio:
+  - id: !extend i2s_input
+    i2s_mclk_pin:
+      number: ${i2s2_mclk_gpio}
+    i2s_lrclk_pin:
+      number: ${i2s2_wclk_gpio}
+    i2s_bclk_pin:
+      number: ${i2s2_bclk_gpio}
+
+  - id: !extend i2s_output
+    i2s_lrclk_pin:
+      number: ${i2s_wclk_gpio}
+    i2s_bclk_pin:
+      number: ${i2s_bclk_gpio}
+
+microphone:
+  - id: !extend i2s_mics
+    bits_per_sample: 16bit
+    mclk_multiple: 256
+    i2s_din_pin: ${i2s2_data_gpio}
+    adc_type: external
+    pdm: false
+    sample_rate: 16000
+    #  bits_per_sample: 32bit
+    i2s_mode: primary
+    i2s_audio_id: i2s_input
+    channel: stereo
+
+audio_adc:
+  - platform: tlv320adc3101
+    id: tlv320_adc
+    pin_reset: ${adc_rst_gpio}
+    #i2s_mode: secondary
+    #mclk: 4096000
+    #address: 0x18
+    #mic_gain: 100%
+    #channel_left:
+    #  source: SEL4
+    #  micbias: 2.5V
+    #  mic_gain: 100%
+    #  enabled: true
+    #channel_right:
+    #  source: SEL4
+    #  micbias: 2.5V
+    #  mic_gain: 100%
+    #  enabled: true
+
+speaker:
+  # Hardware speaker output
+  - id: !extend i2s_audio_speaker
+    i2s_mode: primary
+    bits_per_sample: 16bit
+    audio_dac: pcm5122_dac
+    channel: mono
+    i2s_dout_pin: ${i2s_data_gpio}
+
+#micro_wake_word:
+#  vad: !remove
+
+button:
+  - id: !extend factory_reset_button
+    internal: false
+
+audio_dac:
+  - id: !remove aic3204_dac
+  - platform: pcm5122
+    id: pcm5122_dac
+    i2c_id: internal_i2c
+    address: 0x4C

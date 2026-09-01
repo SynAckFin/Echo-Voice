@@ -1,0 +1,24 @@
+substitutions:
+  name: voice-004
+  friendly_name: Voice Beta 2
+  ipv6_enable: "false"
+  #beatlestestplayfile: speaker-test.mp3
+  #beatlestestplayfile: wake_word_triggered.flac
+
+packages:
+  - !include Echo-XC56PY.yaml
+
+esphome:
+  name: ${name}
+  name_add_mac_suffix: false
+  friendly_name: ${friendly_name}
+
+api:
+  encryption:
+    key: !secret api_key
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+

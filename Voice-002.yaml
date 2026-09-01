@@ -1,0 +1,52 @@
+substitutions:
+  name: voice-002
+  friendly_name: Voice Test
+  ipv6_enable: "false"
+
+  # Amplifier
+  jack_sense_gpio:   GPIO17
+  # i2s audio out
+  i2s_mclk_gpio:     GPIO9
+  i2s_bclk_gpio:     GPIO8
+  i2s_data_gpio:     GPIO10
+  i2s_wclk_gpio:     GPIO7
+  # i2s audio in
+  i2s2_data_gpio:    GPIO15
+  i2s2_bclk_gpio:    GPIO13
+  i2s2_wclk_gpio:    GPIO14
+  i2s2_mclk_gpio:    GPIO12
+  # i2c
+  sda_gpio:          GPIO5
+  scl_gpio:          GPIO6
+  # Control buttons
+  btn_vol_up_gpio:   GPIO16
+  btn_vol_down_gpio: GPIO18
+  btn_mic_mute_gpio: GPIO2
+  btn_attn_gpio:     GPIO1
+  # Misc
+  mic_mute_gpio:     GPIO4
+  adc_rst_gpio:      GPIO42
+  # Other
+  en_audio_gpio:     GPIO38
+  en_amp_gpio:       GPIO39
+  en_aux_out_gpio:   GPIO40
+  
+packages:
+  - !include Echo-XC56PY.yaml
+
+esphome:
+  name: ${name}
+  name_add_mac_suffix: false
+  friendly_name: ${friendly_name}
+      
+api:
+  encryption:
+    key: !secret api_key
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+    
+logger:
+  level: DEBUG
+
